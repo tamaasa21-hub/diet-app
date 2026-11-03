@@ -7,6 +7,7 @@ import { useProfile } from "@/components/ProfileProvider";
 import { ProfileForm } from "@/components/ProfileForm";
 import { PageHeader, useToast } from "@/components/ui";
 import { DataExport, DeleteAccount } from "@/components/AccountData";
+import { ClaudeConnect } from "@/components/ClaudeConnect";
 
 export default function SettingsPage() {
   const { profile, userId, email, reload } = useProfile();
@@ -29,6 +30,10 @@ export default function SettingsPage() {
         <MenuLink href="/settings/password" label="🔑 パスワード変更" />
         <MenuLink href="/privacy" label="🔒 プライバシーについて" />
       </section>
+
+      <div className="mb-4">
+        <ClaudeConnect />
+      </div>
 
       <h2 className="mb-2 font-bold">プロフィールと目標</h2>
       <ProfileForm

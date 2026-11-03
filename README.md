@@ -21,6 +21,7 @@
 | 集計 | 日（PFCバランス・食事別）／週／月（kcal・P・F の棒グラフ＋目標ライン、平均、達成日数、表） |
 | 体重 | 記録と推移グラフ（1か月・3か月・1年） |
 | 🎯 目標体重 | 目標体重と目標日（任意）を決めると、スタート→今→目標の進み具合、予定ライン、最近4週間のペースから「いつ届くか」の予測、目標日に間に合う1日の目安カロリー（実際の食事と体重の変化から計算）を表示。速すぎる目標や基礎代謝を下回るカロリーには注意を表示。ホームにも「ゴールまであと○kg」 |
+| 🤖 Claude 連携 | 設定で連携URLを発行し、claude.ai の「設定 → コネクタ → カスタムコネクタを追加」に登録すると、Claude のチャットから食事・体重の記録や振り返りができる（MCPサーバー：`/api/mcp/<連携キー>`。読み書きは連携キーの持ち主のデータだけ） |
 | 設定 | 身体情報・目標値の変更（提案値の再計算）、パスワード変更、ログアウト、データの書き出し（CSV）、アカウント削除 |
 | プライバシー（`/privacy`） | ログインなしで見られる説明ページ。友達に紹介するときはこのURLを送ればOK |
 
@@ -98,6 +99,9 @@ SQL Editor で [`supabase/002_delete_account.sql`](supabase/002_delete_account.s
 #### ④-1.6 目標体重機能を有効にする
 SQL Editor で [`supabase/003_goal_weight.sql`](supabase/003_goal_weight.sql) を実行します（`schema.sql` を最新版で実行した場合は不要）。
 
+#### ④-1.7 Claude 連携を有効にする
+SQL Editor で [`supabase/004_claude_connector.sql`](supabase/004_claude_connector.sql) を実行します。
+
 #### ④-2 メール確認について（重要）
 無料プランの標準メール送信は **1時間あたり数通まで** と非常に少なく、部活の仲間が一斉に登録すると確認メールが届かなくなります。どちらかを選んでください。
 
@@ -173,6 +177,7 @@ src/lib/nutrition.ts       … 目標値の計算
 src/lib/foodDb.ts          … 音声入力用の食品辞書（ここに追加すると認識できる食品が増える）
 src/lib/parseFoodText.ts   … 話した文章を品目に分ける処理
 src/lib/labelOcr.ts        … 栄養成分表示の読み取り
+src/app/api/mcp/[token]    … Claude 連携用の MCP サーバー
 public/sw.js               … Service Worker（PWA）
 ```
 
