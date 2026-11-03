@@ -89,6 +89,22 @@ create table if not exists public.weight_logs (
 );
 
 -- =====================================================================
+-- アプリ（ログイン済みユーザー）からテーブルを使えるようにする
+-- ※「新しいテーブルを自動的に公開する」をオフにしたプロジェクトでも動くよう明示的に許可。
+--   どの行を読み書きできるかは、下の RLS で「本人の行だけ」に制限される。
+-- =====================================================================
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on
+  public.profiles, public.meal_entries, public.foods,
+  public.recipes, public.recipe_ingredients, public.weight_logs
+to authenticated;
+-- 未ログインの人には一切アクセスさせない
+revoke all on
+  public.profiles, public.meal_entries, public.foods,
+  public.recipes, public.recipe_ingredients, public.weight_logs
+from anon;
+
+-- =====================================================================
 -- Row Level Security（RLS）: 自分のデータだけ読み書きできるようにする
 -- =====================================================================
 alter table public.profiles           enable row level security;
