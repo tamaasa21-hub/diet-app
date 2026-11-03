@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { PageHeader, Segmented, Sheet, NutrientLine, NutrientInputs, EmptyState, useToast, parseNutrientStrings, emptyNutrientStrings, type NutrientStrings } from "@/components/ui";
 import { PortionPicker, type Portion } from "@/components/PortionPicker";
+import { AiInput } from "@/components/AiInput";
+import { useProfile } from "@/components/ProfileProvider";
 import { guessMealType, todayStr, formatJP } from "@/lib/date";
 import { scaleNutrients, sumNutrients } from "@/lib/nutrition";
 import { MEAL_TYPES, type Food, type MealType, type Nutrients, type Recipe, type RecipeIngredient } from "@/lib/types";
@@ -27,6 +29,8 @@ function AddPageInner() {
   const params = useSearchParams();
   const toast = useToast();
   const supabase = createClient();
+  const { profile } = useProfile();
+  const aiParam = params.get("ai");
 
   const [date, setDate] = useState(params.get("date") ?? todayStr());
   const [mealType, setMealType] = useState<MealType>((params.get("meal") as MealType) ?? guessMealType());
@@ -37,18 +41,17 @@ function AddPageInner() {
   const [recipes, setRecipes] = useState<RecipeWithTotal[]>([]);
   const [recent, setRecent] = useState<RecentItem[]>([]);
   const [todayCount, setTodayCount] = useState(0);
+  const [dayTotal, setDayTotal] = useState<Nutrients>({ kcal: 0, protein: 0, fat: 0, carbs: 0 });
 
   const [portionFood, setPortionFood] = useState<Food | null>(null);
   const [portionRecipe, setPortionRecipe] = useState<RecipeWithTotal | null>(null);
   const [busy, setBusy] = useState(false);
 
   const loadCount = useCallback(async () => {
-    const { count } = await supabase
-      .from("meal_entries")
-      .select("id", { count: "exact", head: true })
-      .eq("eaten_on", date)
-      .eq("meal_type", mealType);
-    setTodayCount(count ?? 0);
+    const { data } = await supabase.from("meal_entries").select("meal_type,kcal,protein,fat,carbs").eq("eaten_on", date);
+    const rows = (data as (Nutrients & { meal_type: MealType })[]) ?? [];
+    setTodayCount(rows.filter((r) => r.meal_type === mealType).length);
+    setDayTotal(sumNutrients(rows));
   }, [supabase, date, mealType]);
 
   useEffect(() => {
@@ -132,6 +135,18 @@ function AddPageInner() {
           <span className="text-sm text-gray-500">{formatJP(date)}</span>
         </div>
         <Segmented options={MEAL_TYPES.map((m) => ({ value: m.value, label: `${m.icon}${m.label}` }))} value={mealType} onChange={setMealType} />
+        <AiInput
+          date={date}
+          mealType={mealType}
+          dayTotal={dayTotal}
+          targetKcal={profile.target_kcal ?? 0}
+          onRecorded={loadCount}
+          initialOpen={aiParam === "voice" || aiParam === "label" ? aiParam : null}
+        />
+        <p className="text-center text-xs text-gray-500">
+          今日の合計 {Math.round(dayTotal.kcal).toLocaleString()} kcal ・ あと{" "}
+          <b>{Math.round((profile.target_kcal ?? 0) - dayTotal.kcal).toLocaleString()} kcal</b>
+        </p>
         <Segmented
           options={[
             { value: "foods", label: "マイ食品" },

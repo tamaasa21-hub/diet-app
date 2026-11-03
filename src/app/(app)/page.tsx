@@ -66,6 +66,15 @@ export default function HomePage() {
         </div>
       </section>
 
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Link href={`/add?date=${date}&ai=voice`} className="btn-primary py-3">
+          🎤 話して記録
+        </Link>
+        <Link href={`/add?date=${date}&ai=label`} className="btn-secondary py-3">
+          📷 成分表示を撮る
+        </Link>
+      </div>
+
       <div className="mt-4 space-y-3">
         {MEAL_TYPES.map((m) => {
           const items = entries.filter((e) => e.meal_type === m.value);
