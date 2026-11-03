@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { PageHeader, Segmented, Sheet, NutrientLine, NutrientInputs, EmptyState, useToast, parseNutrientStrings, emptyNutrientStrings, type NutrientStrings } from "@/components/ui";
 import { PortionPicker, type Portion } from "@/components/PortionPicker";
-import { AiInput } from "@/components/AiInput";
+import { QuickInput } from "@/components/QuickInput";
 import { useProfile } from "@/components/ProfileProvider";
 import { guessMealType, todayStr, formatJP } from "@/lib/date";
 import { scaleNutrients, sumNutrients } from "@/lib/nutrition";
@@ -135,8 +135,9 @@ function AddPageInner() {
           <span className="text-sm text-gray-500">{formatJP(date)}</span>
         </div>
         <Segmented options={MEAL_TYPES.map((m) => ({ value: m.value, label: `${m.icon}${m.label}` }))} value={mealType} onChange={setMealType} />
-        <AiInput
+        <QuickInput
           date={date}
+          foods={foods}
           mealType={mealType}
           dayTotal={dayTotal}
           targetKcal={profile.target_kcal ?? 0}

@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { compressImage, parseFoodText, readLabel } from "@/lib/ai/client";
-import type { LabelResult } from "@/lib/ai/schemas";
+import { parseFoodText } from "@/lib/parseFoodText";
+import { recognizeLabel, type LabelResult } from "@/lib/labelOcr";
 import { fmt, round1, scaleNutrients, sumNutrients } from "@/lib/nutrition";
-import { MEAL_TYPES, type MealType, type Nutrients } from "@/lib/types";
+import { MEAL_TYPES, type Food, type MealType, type Nutrients } from "@/lib/types";
 import { NutrientLine, Sheet, useToast } from "./ui";
 import { useSpeech } from "./useSpeech";
 
@@ -17,12 +17,14 @@ type Props = {
   /** その日のすでに記録済みの合計（「あと○kcal」の表示用） */
   dayTotal: Nutrients;
   targetKcal: number;
+  /** マイ食品（音声入力で名前が一致したらこの値を使う） */
+  foods: Food[];
   onRecorded: () => void;
   initialOpen?: "voice" | "label" | null;
 };
 
-/** 記録画面の上部に出す「🎤 話して記録」「📷 成分表示を撮る」 */
-export function AiInput(props: Props) {
+/** 記録画面の上部に出す「🎤 話して記録」「📷 成分表示を撮る」（どちらも端末内で処理・無料） */
+export function QuickInput(props: Props) {
   const [open, setOpen] = useState<"voice" | "label" | null>(props.initialOpen ?? null);
   return (
     <>
@@ -45,12 +47,12 @@ export function AiInput(props: Props) {
 }
 
 /* ====================== 🎤 話して記録 ====================== */
-function VoiceSheet({ open, onClose, date, mealType, dayTotal, targetKcal, onRecorded }: Props & { open: boolean; onClose: () => void }) {
+function VoiceSheet({ open, onClose, date, mealType, dayTotal, targetKcal, foods, onRecorded }: Props & { open: boolean; onClose: () => void }) {
   const toast = useToast();
   const [text, setText] = useState("");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
+  const [unrecognized, setUnrecognized] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const speech = useSpeech((t) => setText((prev) => (prev ? `${prev}、${t}` : t)));
 
@@ -64,23 +66,24 @@ function VoiceSheet({ open, onClose, date, mealType, dayTotal, targetKcal, onRec
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  async function analyze() {
+  function analyze() {
     speech.stop();
-    setLoading(true);
     setError(null);
-    try {
-      const { items, remaining } = await parseFoodText(text);
-      if (items.length === 0) {
-        setError("食べ物が見つかりませんでした。「バナナ1本、ゆで卵1個」のように話してみてください。");
-      } else {
-        setDrafts(items.map((i) => ({ ...i, meal_type: i.meal_type ?? mealType, checked: true })));
-        if (remaining <= 5) toast(`今日のAI利用はあと${remaining}回です`);
-      }
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
+    const { items, unrecognized } = parseFoodText(text, foods);
+    if (items.length === 0) {
+      setError(
+        unrecognized.length > 0
+          ? `「${unrecognized.join("」「")}」は辞書にない食品でした。手入力で記録するか、マイ食品に登録すると次から音声で使えます。`
+          : "食べ物が見つかりませんでした。「バナナ1本、ゆで卵1個」のように話してみてください。",
+      );
+      return;
     }
+    setUnrecognized(unrecognized);
+    setDrafts(items.map((i) => ({ ...i, meal_type: i.meal_type ?? mealType, checked: true })));
+  }
+
+  function addBlank() {
+    setDrafts((ds) => [...(ds ?? []), { name: "", amount: "", kcal: 0, protein: 0, fat: 0, carbs: 0, meal_type: mealType, checked: true, note: "", source: "unknown" }]);
   }
 
   const selected = drafts?.filter((d) => d.checked) ?? [];
@@ -89,6 +92,7 @@ function VoiceSheet({ open, onClose, date, mealType, dayTotal, targetKcal, onRec
 
   async function save() {
     if (selected.length === 0) return;
+    if (selected.some((d) => !d.name.trim())) return toast("食品名が空の品目があります");
     setSaving(true);
     const { error } = await createClient()
       .from("meal_entries")
@@ -118,7 +122,7 @@ function VoiceSheet({ open, onClose, date, mealType, dayTotal, targetKcal, onRec
       {!drafts ? (
         <div className="space-y-3">
           <p className="text-xs text-gray-500">
-            食べたものを普段どおりに話すか入力してください。数値を言えばその値を使い、マイ食品に登録済みのものはその値で計算します。
+            食べたものを普段どおりに話すか入力してください。数値を言えばその値を使い、マイ食品に登録済みのものはその値、それ以外はよく食べる食品の目安値で計算します。
           </p>
           <textarea
             className="input min-h-32"
@@ -138,8 +142,8 @@ function VoiceSheet({ open, onClose, date, mealType, dayTotal, targetKcal, onRec
             <p className="rounded-xl bg-gray-50 p-3 text-xs text-gray-500">キーボードのマイクボタン🎤を押すと、音声で入力できます。</p>
           )}
           {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p>}
-          <button onClick={analyze} disabled={!text.trim() || loading} className="btn-primary w-full py-3">
-            {loading ? "AIが計算中…" : "AIで計算する"}
+          <button onClick={analyze} disabled={!text.trim()} className="btn-primary w-full py-3">
+            計算する
           </button>
         </div>
       ) : (
@@ -184,6 +188,16 @@ function VoiceSheet({ open, onClose, date, mealType, dayTotal, targetKcal, onRec
               </li>
             ))}
           </ul>
+          {unrecognized.length > 0 && (
+            <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">
+              読み取れなかった部分：「{unrecognized.join("」「")}」
+              <br />
+              下の「品目を追加」から入力できます。マイ食品に登録すると、次から音声で使えます。
+            </p>
+          )}
+          <button onClick={addBlank} className="w-full rounded-xl border-2 border-dashed border-gray-200 py-2 text-sm font-semibold text-gray-500">
+            ＋ 品目を追加
+          </button>
 
           <div className="rounded-xl bg-brand-50 p-3 text-center">
             <div className="text-xs text-gray-600">
@@ -207,7 +221,7 @@ function VoiceSheet({ open, onClose, date, mealType, dayTotal, targetKcal, onRec
               {saving ? "記録中…" : `${selected.length}品を記録する`}
             </button>
           </div>
-          <p className="text-center text-[11px] text-gray-400">AIの推定値です。気になる数値はタップして直せます。</p>
+          <p className="text-center text-[11px] text-gray-400">「目安」は一般的な値です。気になる数値はタップして直せます。</p>
         </div>
       )}
     </Sheet>
@@ -218,7 +232,8 @@ function SourceBadge({ source }: { source: string }) {
   const map: Record<string, [string, string]> = {
     stated: ["言った数値", "bg-blue-50 text-blue-700"],
     my_food: ["マイ食品", "bg-brand-50 text-brand-700"],
-    estimate: ["AI推定", "bg-amber-50 text-amber-700"],
+    estimate: ["目安", "bg-amber-50 text-amber-700"],
+    unknown: ["手入力", "bg-gray-100 text-gray-600"],
   };
   const [label, cls] = map[source] ?? map.estimate;
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>{label}</span>;
@@ -228,9 +243,9 @@ function SourceBadge({ source }: { source: string }) {
 function LabelSheet({ open, onClose, date, mealType, dayTotal, targetKcal, onRecorded }: Props & { open: boolean; onClose: () => void }) {
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [image, setImage] = useState<string | null>(null);
-  const [note, setNote] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ p: number; status: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [label, setLabel] = useState<LabelResult | null>(null);
   const [name, setName] = useState("");
@@ -242,8 +257,9 @@ function LabelSheet({ open, onClose, date, mealType, dayTotal, targetKcal, onRec
 
   useEffect(() => {
     if (!open) {
-      setImage(null);
-      setNote("");
+      setFile(null);
+      setPreview(null);
+      setProgress(null);
       setLabel(null);
       setError(null);
       setGrams("");
@@ -251,30 +267,34 @@ function LabelSheet({ open, onClose, date, mealType, dayTotal, targetKcal, onRec
     }
   }, [open]);
 
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
+  useEffect(() => {
     if (!file) return;
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
     setError(null);
-    try {
-      setImage(await compressImage(file));
-    } catch (err) {
-      setError((err as Error).message);
-    }
+    setFile(f);
   }
 
   async function analyze() {
-    if (!image) return;
-    setLoading(true);
+    if (!file) return;
     setError(null);
+    setProgress({ p: 0, status: "準備中" });
     try {
-      const { label, remaining } = await readLabel(image, note);
+      const label = await recognizeLabel(file, (p, status) => setProgress({ p, status }));
       if (!label.readable) {
-        setError(`栄養成分表示を読み取れませんでした。${label.note ? `（${label.note}）` : ""}文字がはっきり写るように、明るい場所で近づいて撮り直してください。`);
+        setError("栄養成分表示の数字を読み取れませんでした。枠の部分だけを、明るい場所で正面から近づいて撮り直してください。（下の「数値を手で入れる」から入力もできます）");
+        setLabel({ ...label, readable: false });
         return;
       }
       setLabel(label);
-      setName(label.product_name || "");
+      setName("");
       setBase({ kcal: label.kcal, protein: label.protein, fat: label.fat, carbs: label.carbs });
       // 「100gあたり」で内容量がわかるなら、最初は1袋全部を選んでおく
       if (label.basis_grams && label.package_grams && label.package_grams !== label.basis_grams) {
@@ -282,12 +302,19 @@ function LabelSheet({ open, onClose, date, mealType, dayTotal, targetKcal, onRec
       } else {
         setRatio(1);
       }
-      if (remaining <= 5) toast(`今日のAI利用はあと${remaining}回です`);
     } catch (e) {
-      setError((e as Error).message);
+      setError(`読み取りに失敗しました：${(e as Error).message}`);
     } finally {
-      setLoading(false);
+      setProgress(null);
     }
+  }
+
+  function manualEntry() {
+    const l = label ?? { readable: false, basis_label: "1食あたり", basis_grams: null, package_grams: null, kcal: 0, protein: 0, fat: 0, carbs: 0, missing: [], rawText: "" };
+    setLabel({ ...l, readable: true });
+    setBase({ kcal: l.kcal, protein: l.protein, fat: l.fat, carbs: l.carbs });
+    setRatio(1);
+    setError(null);
   }
 
   const effectiveRatio = grams && label?.basis_grams ? Number(grams) / label.basis_grams : ratio;
@@ -317,7 +344,7 @@ function LabelSheet({ open, onClose, date, mealType, dayTotal, targetKcal, onRec
     onClose();
   }
 
-  const ratioOptions: { label: string; ratio: number }[] = label
+  const ratioOptions: { label: string; ratio: number }[] = label?.readable
     ? [
         ...(label.basis_grams && label.package_grams && label.package_grams !== label.basis_grams
           ? [{ label: `1袋全部 (${label.package_grams}g)`, ratio: label.package_grams / label.basis_grams }]
@@ -331,32 +358,48 @@ function LabelSheet({ open, onClose, date, mealType, dayTotal, targetKcal, onRec
   return (
     <Sheet open={open} onClose={onClose} title="📷 成分表示を読み取る">
       <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
-      {!label ? (
+      {!label?.readable ? (
         <div className="space-y-3">
-          <p className="text-xs text-gray-500">袋や箱の裏の「栄養成分表示」の枠を、文字がはっきり読めるように撮影してください。</p>
-          {image ? (
+          <p className="text-xs text-gray-500">
+            袋や箱の裏の「栄養成分表示」の枠を、文字がはっきり読めるように正面から撮影してください。読み取りはスマホの中で行います（無料）。
+          </p>
+          {preview ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={image} alt="撮影した成分表示" className="max-h-72 w-full rounded-xl object-contain" />
+            <img src={preview} alt="撮影した成分表示" className="max-h-72 w-full rounded-xl object-contain" />
           ) : (
             <button onClick={() => fileRef.current?.click()} className="flex h-40 w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-300 text-gray-500">
               <span className="text-4xl">📷</span>
               <span className="mt-1 text-sm font-semibold">タップして撮影 / 写真を選ぶ</span>
             </button>
           )}
-          {image && (
-            <>
-              <input className="input" placeholder="補足（任意）例：2人前の袋、1人前だけ食べた" value={note} onChange={(e) => setNote(e.target.value)} />
-              <div className="flex gap-2">
-                <button onClick={() => fileRef.current?.click()} className="btn-secondary">
-                  撮り直す
-                </button>
-                <button onClick={analyze} disabled={loading} className="btn-primary flex-1 py-3">
-                  {loading ? "読み取り中…" : "数字を読み取る"}
-                </button>
+          {progress && (
+            <div>
+              <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                <div className="h-full bg-brand-500 transition-all" style={{ width: `${Math.round(progress.p * 100)}%` }} />
               </div>
-            </>
+              <p className="mt-1 text-center text-xs text-gray-500">{progress.status}…</p>
+            </div>
+          )}
+          {file && (
+            <div className="flex gap-2">
+              <button onClick={() => fileRef.current?.click()} disabled={!!progress} className="btn-secondary">
+                撮り直す
+              </button>
+              <button onClick={analyze} disabled={!!progress} className="btn-primary flex-1 py-3">
+                {progress ? "読み取り中…" : "数字を読み取る"}
+              </button>
+            </div>
           )}
           {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p>}
+          {label?.rawText && (
+            <details className="text-xs text-gray-500">
+              <summary>読み取った文字を見る</summary>
+              <pre className="mt-1 whitespace-pre-wrap rounded-lg bg-gray-50 p-2">{label.rawText}</pre>
+            </details>
+          )}
+          <button onClick={manualEntry} className="w-full text-center text-sm font-semibold text-brand-600">
+            数値を手で入れる
+          </button>
         </div>
       ) : (
         <div className="space-y-4">
@@ -381,8 +424,16 @@ function LabelSheet({ open, onClose, date, mealType, dayTotal, targetKcal, onRec
                 </label>
               ))}
             </div>
-            {label.note && <p className="mt-1 text-[11px] text-gray-500">💡 {label.note}</p>}
+            {label.missing.length > 0 && label.rawText && (
+              <p className="mt-1 text-[11px] text-amber-700">⚠ {label.missing.join("・")} が読み取れませんでした。写真を見て入力してください。</p>
+            )}
             <p className="mt-1 text-[11px] text-gray-400">写真と見比べて、違っていたら直してください。</p>
+            {label.rawText && (
+              <details className="mt-1 text-[11px] text-gray-500">
+                <summary>読み取った文字を見る</summary>
+                <pre className="mt-1 whitespace-pre-wrap rounded-lg bg-gray-50 p-2">{label.rawText}</pre>
+              </details>
+            )}
           </div>
 
           <div>
@@ -430,7 +481,7 @@ function LabelSheet({ open, onClose, date, mealType, dayTotal, targetKcal, onRec
             マイ食品にも登録する（次からワンタップ・音声でも使える）
           </label>
           <div className="flex gap-2">
-            <button onClick={() => setLabel(null)} className="btn-secondary">
+            <button onClick={() => setLabel(label.rawText ? { ...label, readable: false } : null)} className="btn-secondary">
               戻る
             </button>
             <button onClick={save} disabled={saving} className="btn-primary flex-1 py-3">
