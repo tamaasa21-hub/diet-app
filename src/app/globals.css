@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #ecfdf5;
+  --color-brand-100: #d1fae5;
+  --color-brand-500: #10b981;
+  --color-brand-600: #059669;
+  --color-brand-700: #047857;
+  --color-protein: #3b82f6;
+  --color-fat: #f59e0b;
+  --color-carbs: #a855f7;
+  --color-protein-ink: #1d4ed8;
+  --color-fat-ink: #b45309;
+  --color-carbs-ink: #7e22ce;
+  --font-sans: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background: #f5f7f6;
+  color: #1f2937;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* iPhone のホームバー分の余白 */
+.pb-safe {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem);
+}
+
+/* iOS で入力時に勝手にズームしないよう 16px 以上に */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+@utility input {
+  @apply w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100;
+}
+@utility btn {
+  @apply inline-flex items-center justify-center gap-1 rounded-xl px-4 py-2.5 font-semibold transition active:scale-[0.98] disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-brand-600 text-white hover:bg-brand-700;
+}
+@utility btn-secondary {
+  @apply btn border border-gray-200 bg-white text-gray-700 hover:bg-gray-50;
+}
+@utility btn-danger {
+  @apply btn bg-red-50 text-red-600 hover:bg-red-100;
+}
+@utility card {
+  @apply rounded-2xl bg-white p-4 shadow-sm;
+}
+@utility label {
+  @apply mb-1 block text-sm font-medium text-gray-600;
+}
