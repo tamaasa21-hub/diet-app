@@ -57,6 +57,8 @@ export default function HomePage() {
         nextDisabled={isToday}
       />
 
+      <GoalBanner />
+
       <section className={`card mt-3 transition-opacity ${loading ? "opacity-50" : ""}`}>
         <KcalRing eaten={total.kcal} target={profile.target_kcal ?? 0} />
         <div className="mt-4 grid grid-cols-3 gap-3">
@@ -116,5 +118,43 @@ export default function HomePage() {
 
       <EntryEditSheet entry={editing} onClose={() => setEditing(null)} onChanged={load} />
     </div>
+  );
+}
+
+/** ホーム上部の「🎯 ゴールまで あと○kg」 */
+function GoalBanner() {
+  const { profile } = useProfile();
+  const [latest, setLatest] = useState<number | null>(null);
+  const hasGoal = profile.goal_weight_kg != null;
+  useEffect(() => {
+    if (!hasGoal) return;
+    createClient()
+      .from("weight_logs")
+      .select("weight_kg")
+      .order("logged_on", { ascending: false })
+      .limit(1)
+      .then(({ data }) => setLatest(data?.[0] ? Number(data[0].weight_kg) : null));
+  }, [hasGoal]);
+  const current = latest ?? (profile.weight_kg != null ? Number(profile.weight_kg) : null);
+  if (!hasGoal || current == null) return null;
+  const target = Number(profile.goal_weight_kg);
+  const start = Number(profile.goal_start_weight ?? current);
+  const total = target - start;
+  const progress = total === 0 ? 1 : Math.min(1, Math.max(0, (current - start) / total));
+  const reached = target < start ? current <= target : target > start ? current >= target : true;
+  return (
+    <Link href="/weight" className="mt-3 flex items-center gap-3 rounded-2xl bg-white px-4 py-2.5 shadow-sm active:bg-gray-50">
+      <span className="text-xl">🎯</span>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-semibold">
+          {reached ? "目標体重を達成！🎉" : `ゴールまで あと${Math.abs(target - current).toFixed(1)}kg`}
+          <span className="ml-1 text-xs font-normal text-gray-400">（{Math.round(progress * 100)}%）</span>
+        </div>
+        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-100">
+          <div className="h-full rounded-full bg-brand-500" style={{ width: `${progress * 100}%` }} />
+        </div>
+      </div>
+      <span className="text-gray-300">›</span>
+    </Link>
   );
 }

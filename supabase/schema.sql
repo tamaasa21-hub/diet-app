@@ -20,9 +20,19 @@ create table if not exists public.profiles (
   target_fat     numeric(6,1),
   target_carbs   numeric(6,1),
   onboarded      boolean not null default false,
+  goal_weight_kg    numeric(5,1),
+  goal_date         date,
+  goal_start_weight numeric(5,1),
+  goal_start_date   date,
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now()
 );
+
+-- 既存のプロジェクト向け（目標体重の欄。新規作成時は上の create table で作られる）
+alter table public.profiles add column if not exists goal_weight_kg    numeric(5,1);
+alter table public.profiles add column if not exists goal_date         date;
+alter table public.profiles add column if not exists goal_start_weight numeric(5,1);
+alter table public.profiles add column if not exists goal_start_date   date;
 
 -- ---------- 2. 食事の記録 ----------
 create table if not exists public.meal_entries (

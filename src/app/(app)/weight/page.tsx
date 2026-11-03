@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useProfile } from "@/components/ProfileProvider";
 import { EmptyState, PageHeader, Segmented, useToast } from "@/components/ui";
 import { WeightLineChart } from "@/components/Charts";
+import { GoalCard } from "@/components/GoalCard";
 import { addDays, formatJP, formatShort, todayStr } from "@/lib/date";
 import type { WeightLog } from "@/lib/types";
 
@@ -38,6 +39,7 @@ export default function WeightPage() {
     if (error) return toast(`エラー：${error.message}`);
     // 最新の体重ならプロフィールも更新
     const latest = logs[0];
+  const hasGoal = profile.goal_weight_kg != null;
     if (!latest || date >= latest.logged_on) {
       await supabase.from("profiles").update({ weight_kg: w }).eq("id", userId);
       reload();
@@ -63,6 +65,7 @@ export default function WeightPage() {
   }, [logs, range]);
 
   const latest = logs[0];
+  const hasGoal = profile.goal_weight_kg != null;
   const first = chartData[0];
   const diff = latest && first ? Number(latest.weight_kg) - first.value : 0;
 
@@ -92,7 +95,11 @@ export default function WeightPage() {
         <button className="btn-primary w-full">記録する</button>
       </form>
 
-      {latest && (
+      <div className="mt-3">
+        <GoalCard profile={profile} userId={userId} logs={logs} onChanged={reload} />
+      </div>
+
+      {latest && !hasGoal && (
         <section className="card mt-3 flex items-center justify-around text-center">
           <div>
             <div className="text-xs text-gray-500">最新（{formatShort(latest.logged_on)}）</div>
@@ -113,6 +120,7 @@ export default function WeightPage() {
         </section>
       )}
 
+      {!hasGoal && (
       <section className="card mt-3 px-2">
         <div className="mb-2 px-2">
           <Segmented
@@ -127,6 +135,7 @@ export default function WeightPage() {
         </div>
         {chartData.length > 0 ? <WeightLineChart data={chartData} /> : <EmptyState>この期間の記録はまだありません</EmptyState>}
       </section>
+      )}
 
       {logs.length > 0 && (
         <section className="card mt-3 p-0">
