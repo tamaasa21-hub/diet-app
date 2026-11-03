@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -13,6 +13,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "error" | "info"; text: string } | null>(null);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("deleted")) {
+      setMessage({ type: "info", text: "アカウントとすべての記録を削除しました。ご利用ありがとうございました。" });
+    }
+  }, []);
 
   const supabase = createClient();
   const callbackUrl = () => `${window.location.origin}/auth/callback`;
@@ -119,7 +125,13 @@ export default function LoginPage() {
         </button>
       </form>
 
-      <div className="mt-6 space-y-2 text-center text-sm">
+      <p className="mt-6 text-center text-xs text-gray-400">
+        <a href="/privacy" className="underline">
+          プライバシーについて（なんでログインが必要？など）
+        </a>
+      </p>
+
+      <div className="mt-4 space-y-2 text-center text-sm">
         {mode === "login" ? (
           <>
             <p>

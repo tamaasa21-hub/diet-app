@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/auth"];
+const PUBLIC_PATHS = ["/login", "/auth", "/privacy"];
 
 /** リクエストごとにログイン状態を確認・更新し、未ログインなら /login へ */
 export async function updateSession(request: NextRequest) {

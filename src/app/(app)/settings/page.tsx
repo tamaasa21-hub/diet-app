@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useProfile } from "@/components/ProfileProvider";
 import { ProfileForm } from "@/components/ProfileForm";
 import { PageHeader, useToast } from "@/components/ui";
+import { DataExport, DeleteAccount } from "@/components/AccountData";
 
 export default function SettingsPage() {
   const { profile, userId, email, reload } = useProfile();
@@ -26,6 +27,7 @@ export default function SettingsPage() {
         <MenuLink href="/foods" label="🥚 マイ食品（よく食べるもの）" />
         <MenuLink href="/recipes" label="🍲 自作料理" />
         <MenuLink href="/settings/password" label="🔑 パスワード変更" />
+        <MenuLink href="/privacy" label="🔒 プライバシーについて" />
       </section>
 
       <h2 className="mb-2 font-bold">プロフィールと目標</h2>
@@ -39,6 +41,11 @@ export default function SettingsPage() {
           window.scrollTo({ top: 0, behavior: "smooth" });
         }}
       />
+
+      <div className="mt-8 space-y-3">
+        <DataExport />
+        <DeleteAccount />
+      </div>
 
       <section className="mt-8 space-y-3 text-center">
         <p className="text-xs text-gray-400">ログイン中：{email}</p>

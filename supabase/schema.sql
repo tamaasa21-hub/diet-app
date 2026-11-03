@@ -180,3 +180,26 @@ $$;
 drop trigger if exists profiles_touch on public.profiles;
 create trigger profiles_touch before update on public.profiles
   for each row execute function public.touch_updated_at();
+
+-- =====================================================================
+-- アカウント削除（本人のみ。全データが一緒に消える）
+-- =====================================================================
+create or replace function public.delete_my_account()
+returns void
+language plpgsql
+security definer set search_path = ''
+as $$
+declare
+  uid uuid := auth.uid();
+begin
+  if uid is null then
+    raise exception 'not authenticated';
+  end if;
+  -- auth.users を消すと、食事・体重・マイ食品・自作料理・プロフィールも
+  -- 「on delete cascade」で一緒に消える
+  delete from auth.users where id = uid;
+end;
+$$;
+
+revoke all on function public.delete_my_account() from public, anon;
+grant execute on function public.delete_my_account() to authenticated;
